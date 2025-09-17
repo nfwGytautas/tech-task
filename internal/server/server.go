@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 )
 
 type TCPServer struct {
@@ -20,11 +21,14 @@ type TCPServer struct {
 }
 
 type Connection struct {
+	conn net.Conn
+
 	out chan []byte
 	in  chan []byte
 
 	Ctx    context.Context
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 type OnConnectedCallback func(conn *Connection)
@@ -47,7 +51,7 @@ func (s *TCPServer) Run() error {
 		return fmt.Errorf("failed to listen on %s: %w", s.address, err)
 	}
 
-	log.Printf("Listening on %s", s.address)
+	log.Printf("[Server] Listening on %s", s.address)
 
 	go func() {
 		for {
@@ -55,7 +59,7 @@ func (s *TCPServer) Run() error {
 			case <-s.ctx.Done():
 				err := s.listener.Close()
 				if err != nil {
-					log.Fatalf("failed to close listener: %v", err)
+					log.Fatalf("[Server] failed to close listener: %v", err)
 				}
 				return
 			default:
@@ -66,7 +70,7 @@ func (s *TCPServer) Run() error {
 						return
 					}
 
-					log.Printf("failed to accept connection: %v", err)
+					log.Printf("[Server] failed to accept connection: %v", err)
 					continue
 				}
 
@@ -81,83 +85,36 @@ func (s *TCPServer) Run() error {
 func (s *TCPServer) handleConnection(c net.Conn) {
 	defer c.Close()
 
-	log.Printf("Accepted connection from %s", c.RemoteAddr())
+	log.Printf("[Server] Accepted connection from %s", c.RemoteAddr())
 
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	conn := &Connection{
+		conn:   c,
 		out:    make(chan []byte),
 		in:     make(chan []byte),
 		Ctx:    ctx,
 		cancel: cancel,
+		wg:     sync.WaitGroup{},
 	}
+
+	conn.wg.Add(2)
+
 	// Start reader and writer as goroutines because they can happen simultaneously
 	go func() {
-		buffer := make([]byte, s.bufferSize)
-		for {
-			select {
-			case <-conn.Ctx.Done():
-				// Connection is closing, clean exit
-				return
-			default:
-				num, err := c.Read(buffer)
-				if err != nil {
-					if errors.Is(err, net.ErrClosed) {
-						return
-					}
-
-					if errors.Is(err, io.EOF) {
-						return
-					}
-
-					log.Printf("[Error] Failed to read data from connection: %v", err)
-					cancel()
-					return
-				}
-
-				conn.in <- buffer[:num]
-			}
-
-		}
+		conn.readLoop(s.bufferSize)
+		conn.wg.Done()
 	}()
 
 	go func() {
-		for {
-			select {
-			case <-conn.Ctx.Done():
-				// Connection is closing, clean exit
-				return
-			case data := <-conn.out:
-				_, err := c.Write(data)
-				if err != nil {
-					log.Printf("[Error] Failed to write data to connection: %v", err)
-					cancel()
-					return
-				}
-			}
-		}
+		conn.writeLoop()
+		conn.wg.Done()
 	}()
 
 	go s.onConnect(conn)
 
-	// Keep the connection alive until it is closed
-	<-conn.Ctx.Done()
-
-	// Before closing the connection, flush the out channel
-	log.Println("Flushing out channel")
-	for {
-		select {
-		case data := <-conn.out:
-			_, err := c.Write(data)
-			if err != nil {
-				log.Printf("[Error] Failed to write data to connection: %v", err)
-				return
-			}
-		default:
-			// channel is empty
-			return
-		}
-	}
+	// Keep the connection alive until work is finished
+	conn.wg.Wait()
 }
 
 func (c *Connection) Close() {
@@ -170,4 +127,57 @@ func (c *Connection) Send(data []byte) {
 
 func (c *Connection) Receive() []byte {
 	return <-c.in
+}
+
+func (c *Connection) readLoop(size int) {
+	buffer := make([]byte, size)
+	for {
+		select {
+		case <-c.Ctx.Done():
+			// Connection is closing, clean exit
+			return
+		default:
+			num, err := c.conn.Read(buffer)
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+
+				if errors.Is(err, io.EOF) {
+					return
+				}
+
+				log.Printf("[Server] [Error] Failed to read data from connection: %v", err)
+				c.cancel()
+				return
+			}
+
+			c.in <- buffer[:num]
+		}
+	}
+}
+
+func (c *Connection) writeLoop() {
+	for {
+		select {
+		case <-c.Ctx.Done():
+			// Connection is closing, flush remaining
+			for data := range c.out {
+				_, err := c.conn.Write(data)
+				if err != nil {
+					log.Printf("[Server] [Error] Failed to write data to connection: %v", err)
+					c.cancel()
+					return
+				}
+			}
+			return
+		case data := <-c.out:
+			_, err := c.conn.Write(data)
+			if err != nil {
+				log.Printf("[Server] [Error] Failed to write data to connection: %v", err)
+				c.cancel()
+				return
+			}
+		}
+	}
 }

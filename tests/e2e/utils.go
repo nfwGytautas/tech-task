@@ -6,33 +6,34 @@ import (
 	"log"
 	"math/big"
 	"net"
-	"sync"
+	"strconv"
 	"time"
 )
 
 type Spammer struct {
-	mu      sync.Mutex
 	ctx     context.Context
-	conn    net.Conn
 	address string
+	id      int
 }
 
 func NewSpammer(ctx context.Context, address string) (*Spammer, error) {
-	s := &Spammer{
-		mu:      sync.Mutex{},
-		ctx:     ctx,
-		conn:    nil,
-		address: address,
+	id, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return nil, err
 	}
 
-	go s.background()
+	s := &Spammer{
+		ctx:     ctx,
+		address: address,
+		id:      int(id.Int64()),
+	}
+
+	go s.watcher()
 
 	return s, nil
 }
 
-func (s *Spammer) background() {
-	s.reconnect()
-
+func (s *Spammer) watcher() {
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -40,52 +41,61 @@ func (s *Spammer) background() {
 		default:
 		}
 
-		if s.conn == nil {
-			s.reconnect()
-			continue // Continue, because we can potentially fail to connect
-		}
-
-		// Generate random payload
-		payload := make([]byte, 50)
-		_, err := rand.Read(payload)
+		log.Printf("[%d] New instance", s.id)
+		err := s.background()
 		if err != nil {
-			log.Println(err)
+			log.Printf("[%d] [Error] Failed to background: %v", s.id, err)
 			return
+		}
+	}
+}
+
+func (s *Spammer) background() error {
+	conn, err := net.Dial("tcp", s.address)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	go func() {
+		buffer := make([]byte, 1024)
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			default:
+			}
+
+			n, err := conn.Read(buffer)
+			if err != nil {
+				log.Printf("[%d] [Error] Failed to read from connection: %v", s.id, err)
+				return
+			}
+
+			log.Printf("[%d] Message received: %v", s.id, string(buffer[:n]))
+		}
+	}()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return nil
+		default:
 		}
 
 		// Random sleep
 		interval, err := rand.Int(rand.Reader, big.NewInt(5))
 		if err != nil {
-			log.Println(err)
-			return
+			log.Printf("[%d] [Error] Failed to generate random interval: %v", s.id, err)
+			return err
 		}
 
 		time.Sleep(time.Duration(interval.Int64()) * 100 * time.Millisecond)
 
-		s.mu.Lock()
-		_, err = s.conn.Write(payload)
+		_, err = conn.Write([]byte(strconv.Itoa(s.id)))
 		if err != nil {
-			log.Println(err)
-			s.conn = nil
-			s.mu.Unlock()
-			continue
+			log.Printf("[%d] [Error] Failed to write to connection: %v", s.id, err)
+			return err
 		}
-		s.mu.Unlock()
 	}
-}
-
-func (s *Spammer) reconnect() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	conn, err := net.Dial("tcp", s.address)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	s.conn = conn
-}
-
-func (s *Spammer) Close() {
-	s.conn.Close()
 }
