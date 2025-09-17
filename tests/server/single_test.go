@@ -3,6 +3,8 @@ package server_tests
 import (
 	"context"
 	"testing"
+
+	test_utils "github.com/nfwGytautas/oxylabs/tests"
 )
 
 func TestSingleConnection(t *testing.T) {
@@ -12,10 +14,10 @@ func TestSingleConnection(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	_ = startServer(t, ctx, testCasePort)
+	_ = test_utils.StartServer(t, ctx, testCasePort)
 	defer cancel()
 
-	conn := connectToServer(t, testCasePort)
+	conn := test_utils.ConnectToServer(t, testCasePort)
 	defer conn.Close()
 
 	frame := make([]byte, 1024)

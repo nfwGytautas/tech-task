@@ -19,10 +19,10 @@ type TCPServer struct {
 }
 
 type Connection struct {
-	Out chan []byte
-	In  chan []byte
+	out chan []byte
+	in  chan []byte
 
-	ctx    context.Context
+	Ctx    context.Context
 	cancel context.CancelFunc
 }
 
@@ -85,9 +85,9 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	conn := &Connection{
-		Out:    make(chan []byte),
-		In:     make(chan []byte),
-		ctx:    ctx,
+		out:    make(chan []byte),
+		in:     make(chan []byte),
+		Ctx:    ctx,
 		cancel: cancel,
 	}
 
@@ -96,7 +96,7 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 		buffer := make([]byte, s.bufferSize)
 		for {
 			select {
-			case <-conn.ctx.Done():
+			case <-conn.Ctx.Done():
 				// Connection is closing, clean exit
 				return
 			default:
@@ -107,7 +107,7 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 					return
 				}
 
-				conn.In <- buffer[:num]
+				conn.in <- buffer[:num]
 			}
 
 		}
@@ -116,11 +116,11 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 	go func() {
 		for {
 			select {
-			case <-conn.ctx.Done():
+			case <-conn.Ctx.Done():
 				// Connection is closing, clean exit
 				return
 			default:
-				data := <-conn.Out
+				data := <-conn.out
 				_, err := c.Write(data)
 				if err != nil {
 					log.Printf("[Error] Failed to write data to connection: %v", err)
@@ -134,9 +134,17 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 	go s.onConnect(conn)
 
 	// Keep the connection alive until it is closed
-	<-conn.ctx.Done()
+	<-conn.Ctx.Done()
 }
 
 func (c *Connection) Close() {
 	c.cancel()
+}
+
+func (c *Connection) Send(data []byte) {
+	c.out <- data
+}
+
+func (c *Connection) Receive() []byte {
+	return <-c.in
 }
