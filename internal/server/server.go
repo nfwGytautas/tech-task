@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 )
@@ -90,7 +91,6 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 		Ctx:    ctx,
 		cancel: cancel,
 	}
-
 	// Start reader and writer as goroutines because they can happen simultaneously
 	go func() {
 		buffer := make([]byte, s.bufferSize)
@@ -102,6 +102,14 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 			default:
 				num, err := c.Read(buffer)
 				if err != nil {
+					if errors.Is(err, net.ErrClosed) {
+						return
+					}
+
+					if errors.Is(err, io.EOF) {
+						return
+					}
+
 					log.Printf("[Error] Failed to read data from connection: %v", err)
 					cancel()
 					return
@@ -119,8 +127,7 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 			case <-conn.Ctx.Done():
 				// Connection is closing, clean exit
 				return
-			default:
-				data := <-conn.out
+			case data := <-conn.out:
 				_, err := c.Write(data)
 				if err != nil {
 					log.Printf("[Error] Failed to write data to connection: %v", err)
@@ -135,6 +142,22 @@ func (s *TCPServer) handleConnection(c net.Conn) {
 
 	// Keep the connection alive until it is closed
 	<-conn.Ctx.Done()
+
+	// Before closing the connection, flush the out channel
+	log.Println("Flushing out channel")
+	for {
+		select {
+		case data := <-conn.out:
+			_, err := c.Write(data)
+			if err != nil {
+				log.Printf("[Error] Failed to write data to connection: %v", err)
+				return
+			}
+		default:
+			// channel is empty
+			return
+		}
+	}
 }
 
 func (c *Connection) Close() {

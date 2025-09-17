@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/nfwGytautas/oxylabs/internal/room"
 	"github.com/nfwGytautas/oxylabs/internal/server"
 )
 
@@ -14,8 +15,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	tcpServer := server.NewTCPServer(ctx, "localhost:9000", 1024, func(conn *server.Connection) {
-		log.Println("New connection")
+	room := room.NewRoom(100)
+
+	tcpServer := server.NewTCPServer(ctx, "localhost:9000", 100, func(conn *server.Connection) {
+		room.AddNewClient(conn)
 	})
 
 	err := tcpServer.Run()

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/nfwGytautas/oxylabs/internal/room"
-	test_utils "github.com/nfwGytautas/oxylabs/tests"
+	"github.com/nfwGytautas/oxylabs/internal/server"
 )
 
 func TestE2ESimple(t *testing.T) {
@@ -15,34 +15,22 @@ func TestE2ESimple(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	room := room.NewRoom(2000)
+	room := room.NewRoom(100)
 
-	_ = test_utils.StartServer(t, ctx, testCasePort)
-	defer cancel()
+	tcpServer := server.NewTCPServer(ctx, "localhost:"+testCasePort, 100, func(conn *server.Connection) {
+		room.AddNewClient(conn)
+	})
 
-	{
-		conn := test_utils.ConnectToServer(t, testCasePort)
-		defer conn.Close()
-
-		driver := &test_utils.NetConnDriver{
-			Conn: conn,
-		}
-
-		room.AddNewClient(driver)
+	err := tcpServer.Run()
+	if err != nil {
+		t.Fatalf("Failed to start TCP server: %v", err)
 	}
 
-	{
-		conn := test_utils.ConnectToServer(t, testCasePort)
-		defer conn.Close()
-
-		driver := &test_utils.NetConnDriver{
-			Conn: conn,
-		}
-
-		room.AddNewClient(driver)
-
-		driver.Send([]byte("Hello, world!"))
+	spammer, err := NewSpammer(ctx, "localhost:"+testCasePort)
+	if err != nil {
+		t.Fatalf("Failed to start spammer: %v", err)
 	}
+	defer spammer.Close()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(5 * time.Second)
 }
