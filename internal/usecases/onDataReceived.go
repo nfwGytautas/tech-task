@@ -10,6 +10,11 @@ func (u *Usecases) OnDataReceived(id model.ConnectionID, payload []byte) {
 		return
 	}
 
+	u.rw.Lock()
+	defer u.rw.Unlock()
+
+	connection.IncomingBytes += len(payload)
+
 	if connection.IncomingBytes > u.DataLimit {
 		// log.Printf("[ Usecases ] Connection %s exceeded upload data limit, dropping...", id)
 		u.Connector.Send(connection.ID, []byte("Exceeded data limit"))
@@ -17,11 +22,6 @@ func (u *Usecases) OnDataReceived(id model.ConnectionID, payload []byte) {
 		u.ConnectionRepo.RemoveConnection(connection.ID)
 		return
 	}
-
-	u.rw.Lock()
-	defer u.rw.Unlock()
-
-	connection.IncomingBytes += len(payload)
 
 	// log.Printf("[ Usecases ] OnDataReceived: %s, %d", connection.ID, connection.IncomingBytes)
 

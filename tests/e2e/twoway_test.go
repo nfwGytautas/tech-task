@@ -16,14 +16,14 @@ func TestTwoWayConnection(t *testing.T) {
 
 	// Two way spammer
 	{
-		err := NewSpammer(ctx, "localhost:"+port, false)
+		err := NewSpammer(ctx, "localhost:"+port, true)
 		if err != nil {
 			t.Fatalf("Failed to create spammer: %v", err)
 		}
 	}
 
 	{
-		err := NewSpammer(ctx, "localhost:"+port, false)
+		err := NewSpammer(ctx, "localhost:"+port, true)
 		if err != nil {
 			t.Fatalf("Failed to create spammer: %v", err)
 		}

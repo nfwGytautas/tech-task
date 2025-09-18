@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/nfwGytautas/oxylabs/internal/api"
 	"github.com/nfwGytautas/oxylabs/internal/model"
@@ -36,6 +37,12 @@ func main() {
 	tcpServer.OnDataReceived = func(id model.ConnectionID, data []byte) {
 		usecases.OnDataReceived(id, data)
 	}
+
+	go func() {
+		for range time.Tick(10 * time.Millisecond) {
+			usecases.Debug()
+		}
+	}()
 
 	err := tcpServer.Run()
 	if err != nil {

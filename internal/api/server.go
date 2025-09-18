@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"sync"
 
@@ -45,7 +46,7 @@ func (s *TCPServer) Run() error {
 		return fmt.Errorf("failed to listen on %s: %w", s.address, err)
 	}
 
-	//log.Printf("[Server] Listening on %s", s.address)
+	log.Printf("[Server] Listening on %s", s.address)
 
 	for {
 		select {
@@ -78,13 +79,13 @@ func (s *TCPServer) Send(id model.ConnectionID, data []byte) {
 
 	conn, ok := s.connections[id]
 	if !ok {
-		//log.Printf("[Server] [Error] Connection not found: %v", conn)
+		log.Printf("[Server] [Error] Connection not found: %v", conn)
 		return
 	}
 
 	_, err := conn.Write(data)
 	if err != nil {
-		//log.Printf("[Server] [Error] Failed to write data to connection: %v", err)
+		log.Printf("[Server] [Error] Failed to write data to connection: %v", err)
 		s.Close(id)
 	}
 }
@@ -95,7 +96,7 @@ func (s *TCPServer) Close(id model.ConnectionID) {
 
 	conn, ok := s.connections[id]
 	if !ok {
-		//log.Printf("[Server] [Error] Connection not found: %v", id)
+		log.Printf("[Server] [Error] Connection not found: %v", id)
 		return
 	}
 	conn.Close()

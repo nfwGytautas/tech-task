@@ -7,7 +7,9 @@ func (u *Usecases) Debug() {
 	defer u.rw.RUnlock()
 
 	fmt.Print("\033[H\033[2J")
+
+	fmt.Printf("Connections: %d\n", len(u.ConnectionRepo.GetAllConnections()))
 	for _, conn := range u.ConnectionRepo.GetAllConnections() {
-		fmt.Printf("Connection: %s, in: %d, out: %d\n", conn.ID, conn.IncomingBytes, conn.OutgoingBytes)
+		fmt.Printf("\t %s, in: %d, out: %d\n", conn.ID, conn.IncomingBytes, conn.OutgoingBytes)
 	}
 }
