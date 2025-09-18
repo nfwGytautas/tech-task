@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -41,13 +43,15 @@ func main() {
 
 	fmt.Println("Connected to server, type your message and press enter, you will receive the messages from the server")
 
+	reader := bufio.NewReader(os.Stdin)
 	for {
-		var input string
-		_, err := fmt.Scanln(&input)
+		input, err := reader.ReadString('\n')
 		if err != nil {
 			log.Printf("Error reading input: %v", err)
 			continue
 		}
+		input = strings.TrimSuffix(input, "\n")
+
 		_, err = conn.Write([]byte(input + "\n"))
 		if err != nil {
 			log.Printf("Error sending to server: %v", err)

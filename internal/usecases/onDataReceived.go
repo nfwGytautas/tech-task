@@ -16,14 +16,11 @@ func (u *Usecases) OnDataReceived(id model.ConnectionID, payload []byte) {
 	connection.IncomingBytes += len(payload)
 
 	if connection.IncomingBytes > u.DataLimit {
-		// log.Printf("[ Usecases ] Connection %s exceeded upload data limit, dropping...", id)
 		u.Connector.Send(connection.ID, []byte("Exceeded data limit"))
 		u.Connector.Close(connection.ID)
 		u.ConnectionRepo.RemoveConnection(connection.ID)
 		return
 	}
-
-	// log.Printf("[ Usecases ] OnDataReceived: %s, %d", connection.ID, connection.IncomingBytes)
 
 	// Enqueue data for processing
 	go func() {

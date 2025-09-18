@@ -64,7 +64,6 @@ func (s *TCPServer) Run() error {
 					return nil
 				}
 
-				//log.Printf("[Server] failed to accept connection: %v", err)
 				continue
 			}
 
@@ -108,8 +107,6 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 	s.rw.Lock()
 	defer s.rw.Unlock()
 
-	//log.Printf("[Server] [Info] New connection: %v", conn.RemoteAddr().String())
-
 	s.connections[model.ConnectionID(conn.RemoteAddr().String())] = conn
 
 	if s.OnConnect != nil {
@@ -122,8 +119,6 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		for {
 			n, err := conn.Read(buffer)
 
-			//log.Printf("[Server] [Info] Data received: %s, %v", conn.RemoteAddr().String(), string(buffer))
-
 			if err != nil {
 				if errors.Is(err, net.ErrClosed) {
 					return
@@ -131,13 +126,11 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 
 				if errors.Is(err, io.EOF) {
 					if s.OnDisconnect != nil {
-						//log.Printf("[Server] [Info] Disconnecting connection: %v", conn.RemoteAddr().String())
 						s.OnDisconnect(model.ConnectionID(conn.RemoteAddr().String()))
 					}
 					return
 				}
 
-				//log.Printf("[Server] [Error] Failed to read data from connection: %v", err)
 				continue
 			}
 

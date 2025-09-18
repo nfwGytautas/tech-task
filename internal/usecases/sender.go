@@ -22,7 +22,6 @@ func (u *Usecases) handleData(data model.Data) {
 		conn.OutgoingBytes += len(data.Data)
 
 		if conn.OutgoingBytes > u.DataLimit {
-			// log.Printf("[ Usecases ] Connection %s exceeded download data limit, dropping...", conn.ID)
 			u.Connector.Send(conn.ID, []byte("Exceeded data limit"))
 			u.Connector.Close(conn.ID)
 			u.ConnectionRepo.RemoveConnection(conn.ID)
