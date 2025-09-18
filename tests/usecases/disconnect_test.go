@@ -49,4 +49,8 @@ func TestDisconnectExisting(t *testing.T) {
 	}
 
 	usecases.Disconnect("1")
+
+	if !repo.RemoveCalled {
+		t.Fatalf("Expected connection 1 to be removed")
+	}
 }
