@@ -157,11 +157,69 @@ func TestSenderMultipleConnections(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	if !connector.SendCalled {
-		t.Fatalf("Expected data to be sent to connection 1")
+		t.Fatalf("Expected data to be sent to connections")
 	}
 
 	if testConnection1.OutgoingBytes != len(payload) {
 		t.Fatalf("Expected connection 1 outgoing bytes to be %d, got %d", len(payload), testConnection1.OutgoingBytes)
+	}
+	if testConnection2.OutgoingBytes != len(payload) {
+		t.Fatalf("Expected connection 2 outgoing bytes to be %d, got %d", len(payload), testConnection2.OutgoingBytes)
+	}
+}
+
+func TestSenderMultipleConnectionsNotSelf(t *testing.T) {
+	payload := []byte("test")
+
+	testConnection1 := model.Connection{ID: "1"}
+	testConnection2 := model.Connection{ID: "2"}
+
+	repo := &TestRepo{
+		OnGetAllConnections: func() []*model.Connection {
+			return []*model.Connection{
+				&testConnection1,
+				&testConnection2,
+			}
+		},
+		OnRemoveConnection: func(id model.ConnectionID) {
+			t.Fatalf("Expected no connection to be removed, got %s", id)
+		},
+	}
+	connector := &TestConnector{
+		OnSend: func(id model.ConnectionID, data []byte) {
+			if id == "1" {
+				t.Fatalf("Expected data to not be sent to connection 1")
+			}
+		},
+		OnClose: func(id model.ConnectionID) {
+			t.Fatalf("Expected no connection to be closed, got %s", id)
+		},
+	}
+
+	dataQueue := make(chan model.Data)
+
+	usecases := usecases.Usecases{
+		ConnectionRepo: repo,
+		DataLimit:      100,
+		DataQueue:      dataQueue,
+		Connector:      connector,
+	}
+
+	go usecases.SenderLoop()
+
+	dataQueue <- model.Data{
+		Sender: "1",
+		Data:   payload,
+	}
+
+	time.Sleep(10 * time.Millisecond)
+
+	if !connector.SendCalled {
+		t.Fatalf("Expected data to be sent to connections")
+	}
+
+	if testConnection1.OutgoingBytes != 0 {
+		t.Fatalf("Expected connection 1 outgoing bytes to be 0, got %d", testConnection1.OutgoingBytes)
 	}
 	if testConnection2.OutgoingBytes != len(payload) {
 		t.Fatalf("Expected connection 2 outgoing bytes to be %d, got %d", len(payload), testConnection2.OutgoingBytes)
